@@ -206,7 +206,30 @@ export function DartScoreTracker({
     }
   }, [initialPlayers]);
 
-  // Function to check for auto bust condition
+  // Calculate score for the current player's turn
+  const calculateTurnScore = (playerId: string) => {
+    return (dartInputs[playerId] || []).reduce((sum, d) => {
+      const v = d.value === '' ? 0 : parseInt(d.value as string, 10);
+      return sum + v * d.multiplier;
+    }, 0);
+  };
+
+  // Returns the count of darts thrown (darts with values) for a player
+  const getDartsThrown = (playerId: string) => {
+    return (dartInputs[playerId] || []).filter(d => d.value !== '').length;
+  };
+
+  // Convert dart inputs to dart values for a player
+  const getDartValues = (playerId: string, dartsToInclude: number = 3) => {
+    return (dartInputs[playerId] || [])
+      .slice(0, dartsToInclude)
+      .map(d => ({
+        value: d.value === '' ? 0 : parseInt(d.value as string, 10),
+        multiplier: d.multiplier
+      }));
+  };
+
+  // Function to check for auto bust condition - updated with dartsThrown parameter
   const checkAutoBust = (playerId: string, dartsThrown: number) => {
     const player = players.find(p => p.id === playerId);
     if (!player) return false;
@@ -225,7 +248,7 @@ export function DartScoreTracker({
     return false;
   };
 
-  // Function to check for auto win condition
+  // Function to check for auto win condition - updated with dartsThrown parameter
   const checkAutoWin = (playerId: string, dartsThrown: number) => {
     const player = players.find(p => p.id === playerId);
     if (!player) return false;
@@ -235,12 +258,7 @@ export function DartScoreTracker({
     
     if (newScore === 0) {
       // Check double out requirement if enabled
-      const darts = dartInputs[playerId]
-        .slice(0, dartsThrown)
-        .map(d => ({
-          value: d.value === '' ? 0 : parseInt(d.value as string, 10),
-          multiplier: d.multiplier
-        }));
+      const darts = getDartValues(playerId, dartsThrown);
       
       // Find the last non-zero dart
       const lastDart = [...darts].reverse().find(d => d.value > 0);
@@ -264,7 +282,35 @@ export function DartScoreTracker({
     return false;
   };
 
-  // Handle dart input change with sequential unlocking, auto bust, and auto win checks
+  // Check game conditions after any dart entry
+  const checkGameConditions = (playerId: string) => {
+    const dartsThrown = getDartsThrown(playerId);
+    
+    // Don't check if no darts thrown yet
+    if (dartsThrown === 0) return;
+    
+    // Check for bust first
+    if (checkAutoBust(playerId, dartsThrown)) {
+      return;
+    }
+    
+    // Then check for win
+    if (checkAutoWin(playerId, dartsThrown)) {
+      return;
+    }
+    
+    // If no bust or win and not on the last dart, unlock next dart
+    if (dartsThrown < 3) {
+      setEnabledDarts(prev => ({
+        ...prev,
+        [playerId]: prev[playerId].map((_, i) => 
+          i <= dartsThrown ? true : false
+        )
+      }));
+    }
+  };
+
+  // Handle dart input change with immediate bust/win checking
   const handleDartInputChange = (
     playerId: string,
     dartIndex: number,
@@ -308,43 +354,10 @@ export function DartScoreTracker({
       };
     });
 
-    // Update enabled darts state if value field changed
-    if (field === 'value' && raw !== '') {
-      // Count how many darts have been thrown so far
-      setTimeout(() => {
-        const player = players.find(p => p.id === playerId);
-        if (!player) return;
-
-        const currentInputs = dartInputs[playerId] || [
-          { value: '', multiplier: 1 },
-          { value: '', multiplier: 1 },
-          { value: '', multiplier: 1 }
-        ];
-
-        // Count darts thrown (darts with values)
-        const dartsThrown = currentInputs.filter(d => d.value !== '').length;
-
-        // Check for auto bust before enabling next dart
-        if (checkAutoBust(playerId, dartsThrown)) {
-          return;
-        }
-
-        // Check for auto win before enabling next dart
-        if (checkAutoWin(playerId, dartsThrown)) {
-          return;
-        }
-
-        // If no bust or win, unlock next dart if available
-        if (dartIndex < 2 && raw !== '') {
-          setEnabledDarts(prev => ({
-            ...prev,
-            [playerId]: prev[playerId].map((enabled, i) => 
-              i === dartIndex + 1 ? true : enabled
-            )
-          }));
-        }
-      }, 100);
-    }
+    // Check game conditions (win/bust) after a short delay to ensure state is updated
+    setTimeout(() => {
+      checkGameConditions(playerId);
+    }, 100);
   };
 
   // Process bust confirmation
@@ -352,11 +365,7 @@ export function DartScoreTracker({
     const { playerId, remainingDarts } = pendingNext;
 
     // Record zeros for any unthrown darts
-    const dartsThisTurn = dartInputs[playerId]
-      .map(d => ({ 
-        value: d.value !== '' ? parseInt(d.value as string) : 0, 
-        multiplier: d.multiplier 
-      }));
+    const dartsThisTurn = getDartValues(playerId);
     
     // Fill remaining darts with zeros
     for (let i = 3 - remainingDarts; i < 3; i++) {
@@ -391,6 +400,22 @@ export function DartScoreTracker({
     });
 
     setBustDialogOpen(false);
+    
+    // Save game state if needed
+    if (onSaveGame) {
+      setTimeout(() => {
+        onSaveGame({
+          players: updatedPlayers,
+          currentGame: {
+            ...currentGame,
+            currentPlayerIndex: currentGame.currentPlayerIndex === players.length - 1 ? 0 : currentGame.currentPlayerIndex + 1,
+            round: currentGame.currentPlayerIndex === players.length - 1 ? currentGame.round + 1 : currentGame.round,
+            roundComplete: currentGame.currentPlayerIndex === players.length - 1
+          },
+          gameSettings
+        });
+      }, 100);
+    }
   };
 
   // Process win confirmation
@@ -453,6 +478,28 @@ export function DartScoreTracker({
     // If not match win, restart game for next leg
     if (!isMatchWin) {
       restartGame();
+    }
+    
+    // Save game state if needed
+    if (onSaveGame && !isMatchWin) {
+      setTimeout(() => {
+        onSaveGame({
+          players: updatedPlayers.map(p => ({
+            ...p,
+            score: gameSettings.startingScore,
+            history: []
+          })),
+          currentGame: {
+            active: true,
+            round: 1,
+            winner: null,
+            gamePoints: updatedPoints,
+            currentPlayerIndex: 0,
+            roundComplete: false
+          },
+          gameSettings
+        });
+      }, 100);
     }
   };
 
@@ -520,13 +567,6 @@ export function DartScoreTracker({
     });
   };
 
-  // Calculate score for the current player's turn
-  const calculateTurnScore = (playerId: string) =>
-    (dartInputs[playerId] || []).reduce((sum, d) => {
-      const v = d.value === '' ? 0 : parseInt(d.value as string, 10);
-      return sum + v * d.multiplier;
-  }, 0);
-
   // Reset only the given player's inputs
   const resetPlayerInputs = (playerId: string) => {
     setDartInputs(prev => ({
@@ -544,128 +584,91 @@ export function DartScoreTracker({
     }));
   };
 
-  // Apply player score (manual score entry)
+  // Apply player score (manual score entry) - Modified to use the auto bust/win logic
   const applyPlayerScore = () => {
-    // Use functional updates for both state variables to avoid stale closures
-    setCurrentGame(prev => {
-      // If game is not active or already has a winner, return unchanged state
-      if (!prev.active || prev.winner) return prev;
-      
-      // Get current player info
-      const currentPlayerIndex = prev.currentPlayerIndex;
-      const currentPlayer = players[currentPlayerIndex];
-      const pid = currentPlayer.id;
-      
-      // Calculate score from dart inputs
-      const turnScore = calculateTurnScore(pid);
-      const darts = (dartInputs[pid] || []).map(d => ({
-        value: d.value === '' ? 0 : parseInt(d.value as string, 10),
-        multiplier: d.multiplier
-      }));
-      
-      // Calculate new score
-      const newScore = currentPlayer.score - turnScore;
-      
-      // Handle double in validation
-      if (gameSettings.doubleIn && 
-          currentPlayer.history.length === 0 && 
-          !darts.some(d => d.multiplier === 2)) {
-        toast.error(`${currentPlayer.name} needs to start with a double!`);
-        resetPlayerInputs(pid);
-        return prev; // Return unchanged state
-      }
-      
-      // Handle bust validation
-      if (newScore < 0) {
-        toast.error(`Bust! Score too high for ${currentPlayer.name}`);
-        resetPlayerInputs(pid);
-        return prev; // Return unchanged state
-      }
-      
-      // Handle win validation
-      let isWin = false;
-      if (newScore === 0) {
-        const last = darts.slice().reverse().find(d => d.value > 0);
-        if (gameSettings.doubleOut && (!last || last.multiplier !== 2)) {
-          toast.error(`${currentPlayer.name} needs to finish on a double!`);
-          resetPlayerInputs(pid);
-          return prev; // Return unchanged state
-        }
-        isWin = true;
-      }
-      
-      // Create an updated copy of players array with the current player's new info
-      const updatedPlayers = players.map(p =>
-        p.id === pid
-          ? { 
-              ...p, 
-              score: newScore, 
-              history: [...p.history, { 
-                round: prev.round, 
-                score: turnScore, 
-                darts 
-              }] 
-            }
-          : p
-      );
-      
-      // Important: Update the players state with the new array
-      setPlayers(updatedPlayers);
-      
-      // Reset input fields for this player
-      resetPlayerInputs(pid);
-      
-      // Update game points if player won
-      const updatedPoints = { ...prev.gamePoints };
-      if (isWin) {
-        updatedPoints[pid] = (updatedPoints[pid] || 0) + 1;
-      }
-      
-      // Determine next player and round
-      const lastPlayer = currentPlayerIndex === players.length - 1;
-      const nextIndex = lastPlayer ? 0 : currentPlayerIndex + 1;
-      const nextRound = lastPlayer ? prev.round + 1 : prev.round;
-      const nextActive = !isWin || (isWin && updatedPoints[pid] < gameSettings.gamePointThreshold);
-      
-      // Handle game completion
-      if (isWin && updatedPoints[pid] >= gameSettings.gamePointThreshold && onGameComplete) {
-        setTimeout(() => onGameComplete(updatedPlayers.find(p => p.id === pid)!, updatedPoints), 100);
-      } else if (isWin) {
-        setTimeout(() => {
-          toast.success(`${updatedPlayers.find(p => p.id === pid)!.name} wins this game!`);
-          restartGame();
-        }, 100);
-      }
-      
-      // Save game state if needed
-      if (onSaveGame) {
-        const updatedGameState = {
-          active: nextActive,
-          round: nextRound,
-          winner: isWin && updatedPoints[pid] >= gameSettings.gamePointThreshold ? pid : null,
-          gamePoints: updatedPoints,
-          currentPlayerIndex: nextIndex,
-          roundComplete: lastPlayer
-        };
-        
-        onSaveGame({ 
-          players: updatedPlayers, 
-          currentGame: updatedGameState, 
-          gameSettings 
+    const currentPlayerIndex = currentGame.currentPlayerIndex;
+    const currentPlayer = players[currentPlayerIndex];
+    const playerId = currentPlayer.id;
+    
+    // Count darts thrown
+    const dartsThrown = getDartsThrown(playerId);
+    
+    // If no darts thrown, don't do anything
+    if (dartsThrown === 0) {
+      toast.error("Enter at least one dart score");
+      return;
+    }
+    
+    // Check double in validation
+    if (gameSettings.doubleIn && 
+        currentPlayer.history.length === 0 && 
+        !getDartValues(playerId, dartsThrown).some(d => d.multiplier === 2)) {
+      toast.error(`${currentPlayer.name} needs to start with a double!`);
+      resetPlayerInputs(playerId);
+      return;
+    }
+    
+    // Use the same bust and win checking logic that we use for auto-detection
+    if (checkAutoBust(playerId, dartsThrown)) {
+      return;
+    }
+    
+    if (checkAutoWin(playerId, dartsThrown)) {
+      return;
+    }
+    
+    // If we reach here, it's a normal score entry (no bust, no win)
+    const turnScore = calculateTurnScore(playerId);
+    const newScore = currentPlayer.score - turnScore;
+    const darts = getDartValues(playerId, dartsThrown);
+    
+    // Fill remaining darts with zeros
+    for (let i = dartsThrown; i < 3; i++) {
+      darts[i] = { value: 0, multiplier: 1 };
+    }
+    
+    // Update player state
+    const updatedPlayers = players.map(p =>
+      p.id === playerId
+        ? { 
+            ...p, 
+            score: newScore, 
+            history: [...p.history, { 
+              round: currentGame.round, 
+              score: turnScore, 
+              darts 
+            }] 
+          }
+        : p
+    );
+    
+    setPlayers(updatedPlayers);
+    resetPlayerInputs(playerId);
+    
+    // Advance to next player
+    const isLast = currentGame.currentPlayerIndex === players.length - 1;
+    setCurrentGame(prev => ({
+      ...prev,
+      currentPlayerIndex: isLast ? 0 : prev.currentPlayerIndex + 1,
+      round: isLast ? prev.round + 1 : prev.round,
+      roundComplete: isLast
+    }));
+    
+    // Save game state if needed
+    if (onSaveGame) {
+      setTimeout(() => {
+        onSaveGame({
+          players: updatedPlayers,
+          currentGame: {
+            ...currentGame,
+            currentPlayerIndex: isLast ? 0 : currentGame.currentPlayerIndex + 1,
+            round: isLast ? currentGame.round + 1 : currentGame.round,
+            roundComplete: isLast
+          },
+          gameSettings
         });
-      }
-      
-      // Return updated game state
-      return {
-        ...prev,
-        gamePoints: updatedPoints,
-        currentPlayerIndex: nextIndex,
-        round: nextRound,
-        roundComplete: lastPlayer,
-        active: nextActive,
-        winner: isWin && updatedPoints[pid] >= gameSettings.gamePointThreshold ? pid : prev.winner
-      };
-    });
+      }, 100);
+    }
   };
 
   // Get current player
@@ -785,8 +788,8 @@ export function DartScoreTracker({
           <CardDescription>Round {currentGame.round} - Remaining: {currentPlayer.score}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {[0, 1, 2].map(dartIndex => (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          {[0, 1, 2].map(dartIndex => (
               <div key={dartIndex} className="space-y-2">
                 <Label>Dart {dartIndex + 1}</Label>
                 <div className="flex gap-1">
@@ -815,9 +818,8 @@ export function DartScoreTracker({
                   </Select>
                 </div>
               </div>
-            ))}
+          ))}
           </div>
-
           <div className="flex justify-between items-center mt-4">
             <div className="text-xl font-bold">
               Score: {calculateTurnScore(currentPlayer.id)}

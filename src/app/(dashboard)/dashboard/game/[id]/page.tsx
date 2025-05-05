@@ -339,8 +339,9 @@ export default function GamePage({params,}: { params: Promise<{ id: string }>}) 
 
     if (!gameStarted) {
         return (
-            <div className="max-w-3xl mx-auto">
-                <h1 className="text-3xl font-bold mb-6">Loading Game...</h1>
+            <div className="flex items-center justify-center h-[50vh]">
+                <Loader className="animate-spin h-8 w-8 mr-2" />
+                <p>Loading game...</p>
             </div>
         );
     }
