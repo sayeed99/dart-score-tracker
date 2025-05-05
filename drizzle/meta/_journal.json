@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1746186508602,
+      "tag": "0000_simple_grey_gargoyle",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1746201600826,
+      "tag": "0001_fearless_tiger_shark",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1746446471624,
+      "tag": "0002_daily_shinobi_shaw",
+      "breakpoints": true
+    }
+  ]
+}
