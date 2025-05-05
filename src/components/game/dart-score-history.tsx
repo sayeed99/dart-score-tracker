@@ -137,17 +137,18 @@ export function DartScoreHistory({
       });
       
       // Set the current game state
+      const winner = initialGameState?.winner;
       setCurrentGame({
         active: false, // If we're resuming, it's active
         round: maxRound > 0 ? 
           (initialPlayers.length === playersWithMaxRound?.length ? maxRound + 1 : maxRound) : 1,
-        winner: initialGameState?.winner || null, // If there was a winner, we wouldn't be resuming
+        winner: winner || null, // If there was a winner, we wouldn't be resuming
         gamePoints, // Use our initialized game points
         currentPlayerIndex,
         roundComplete: false
       });
     }
-  }, [initialPlayers]);
+  }, [initialPlayers, initialGameState?.winner]);
   // State for scoring
   const [dartInputs, setDartInputs] = useState<Record<string, DartInput[]>>(
     initialPlayers.reduce((acc, player) => {

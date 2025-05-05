@@ -49,7 +49,8 @@ async function getUserGames(userId: number, status?: string) {
         inArray(games.id, gameIdList)
       )
       .orderBy(desc(games.updatedAt))
-      .limit(50);
+      .limit(50)
+      .$dynamic();;
     
     // Filter by status if provided
     if (status === "active") {
@@ -79,17 +80,18 @@ async function getUserGames(userId: number, status?: string) {
       );
     
     // Create a lookup for player info by game ID
-    const playerInfoByGameId = {};
+    // const playerInfoByGameId = {};
+    const playerInfoByGameId = new Map<number, typeof playerInfo[0]>();
     playerInfo.forEach(info => {
-      playerInfoByGameId[info.gameId] = info;
+      playerInfoByGameId.set(info.gameId, info);
     });
     
     // Combine game info with player info
-    let data =  gamesList.map(game => ({
+    const data = gamesList.map(game => ({
       ...game,
-      isWinner: playerInfoByGameId[game.id]?.isWinner || false,
-      finalScore: playerInfoByGameId[game.id]?.finalScore || 0,
-      gamePoints: playerInfoByGameId[game.id]?.gamePoints || 0,
+      isWinner: playerInfoByGameId.get(game.id)?.isWinner || false,
+      finalScore: playerInfoByGameId.get(game.id)?.finalScore || 0,
+      gamePoints: playerInfoByGameId.get(game.id)?.gamePoints || 0,
     }));
     console.log(data);
     return data
@@ -235,7 +237,7 @@ export default async function HistoryPage(
                           asChild
                           className="text-green-600"
                         >
-                          <Link href={`/dashboard/new-game?id=${game.id}`}>
+                          <Link href={`/dashboard/game/${game.id}`}>
                             <Play className="h-4 w-4 mr-1" />
                             Resume
                           </Link>

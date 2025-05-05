@@ -25,7 +25,7 @@ async function getUserStats(userId: number) {
     // Count games won
     const gamesWonResult = await db
       .select({ count: count() })
-      .from(playersGames)
+      .from(playersGames).$dynamic()
       .where(eq(playersGames.userId, userId))
       .where(eq(playersGames.isWinner, true));
 
@@ -48,7 +48,7 @@ async function getUserStats(userId: number) {
       .from(scores)
       .where(eq(scores.playerId, userId));
 
-    const averageScore = Math.round(averageScoreResult[0]?.avgScore || 0);
+    const averageScore = Math.round(Number(averageScoreResult[0]?.avgScore) || 0);
 
     return {
       totalGames,
@@ -116,16 +116,16 @@ async function getRecentGames(userId: number, limit = 5) {
       );
     
     // Create a lookup for player info by game ID
-    const playerInfoByGameId = {};
+    // const playerInfoByGameId = {};
+    const playerInfoByGameId = new Map<number, typeof playerInfo[0]>();
     playerInfo.forEach(info => {
-      playerInfoByGameId[info.gameId] = info;
-    });
-    
+      playerInfoByGameId.set(info.gameId, info);
+    });    
     // Combine game details with player info
     return gameDetails.map(game => ({
       ...game,
-      finalScore: playerInfoByGameId[game.id]?.finalScore || 0,
-      isWinner: playerInfoByGameId[game.id]?.isWinner || false,
+      isWinner: playerInfoByGameId.get(game.id)?.isWinner || false,
+      finalScore: playerInfoByGameId.get(game.id)?.finalScore || 0,
     }));
   } catch (error) {
     console.error("Error fetching recent games:", error);
@@ -185,15 +185,15 @@ async function getActiveGames(userId: number, limit = 3) {
       );
     
     // Create a lookup for player info by game ID
-    const playerInfoByGameId = {};
+    const playerInfoByGameId = new Map<number, typeof playerInfo[0]>();
     playerInfo.forEach(info => {
-      playerInfoByGameId[info.gameId] = info;
-    });
-    
+      playerInfoByGameId.set(info.gameId, info);
+    }); 
+
     // Combine game details with player info
     return gameDetails.map(game => ({
       ...game,
-      finalScore: playerInfoByGameId[game.id]?.finalScore || 0,
+      finalScore: playerInfoByGameId.get(game.id)?.finalScore || 0,
     }));
   } catch (error) {
     console.error("Error fetching active games:", error);
@@ -220,7 +220,7 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back, {session.user.name}!
+            Welcome back, {session?.user.name}!
           </p>
         </div>
         <Button asChild>

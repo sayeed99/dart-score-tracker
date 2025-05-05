@@ -564,7 +564,7 @@ export function DartScoreTracker({
       }));
       
       // Calculate new score
-      let newScore = currentPlayer.score - turnScore;
+      const newScore = currentPlayer.score - turnScore;
       
       // Handle double in validation
       if (gameSettings.doubleIn && 

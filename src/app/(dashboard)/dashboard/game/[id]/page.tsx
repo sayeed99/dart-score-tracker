@@ -15,6 +15,7 @@ import { UserPlus, X, ArrowRight, ArrowLeft, Play, Loader } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DartScoreTracker } from "@/components/game/dart-score-tracker";
 import { safeParseUserId } from "@/lib/auth-utils";
+import { useCallback } from 'react'
 
 type GameMode = "local" | "online" | "practice";
 
@@ -30,7 +31,14 @@ interface GameSettings {
 }
 
 
-export default function GamePage({params}) {
+type GamePageProps = {
+    params: {
+      id: string;
+    };
+};  
+
+
+export default function GamePage({params,}: { params: Promise<{ id: string }>}) {
     const { id } = React.use(params)
     const [playerObjects, setPlayerObjects] = useState<any[]>([]);
     const [currentGame, setCurrentGame] = useState<any>({
@@ -59,18 +67,8 @@ export default function GamePage({params}) {
         roundComplete: false
     });
 
-    // Check for a game ID in URL (for resuming a game)
-    useEffect(() => {
-        // Only run in the browser, and wait for session to be available
-        if (typeof window !== 'undefined' && status !== 'loading') {
-            if (id) {
-                loadExistingGame(parseInt(id));
-            }
-        }
-    }, [status]);
-
     // src/app/(dashboard)/dashboard/new-game/page.tsx
-    const loadExistingGame = async (id: number) => {
+    const loadExistingGame = useCallback(async(id: number) => {
         if (!session?.user?.id) {
             toast.error("You must be logged in to resume a game");
             return;
@@ -159,7 +157,17 @@ export default function GamePage({params}) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [session?.user?.id]);
+
+    // Check for a game ID in URL (for resuming a game)
+    useEffect(() => {
+        // Only run in the browser, and wait for session to be available
+        if (typeof window !== 'undefined' && status !== 'loading') {
+            if (id) {
+                loadExistingGame(parseInt(id));
+            }
+        }
+    }, [status, loadExistingGame, id]);
 
     const handleStartGame = async (settings: GameSettings, playerNames: string[]) => {
         if (!session?.user?.id) {
