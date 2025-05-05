@@ -5,10 +5,8 @@ import { games, playersGames, rounds, scores, users } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { authOptions } from "@/lib/[...nextauth]";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -16,7 +14,7 @@ export async function GET(
   const userId = parseInt(session.user.id);
   const { id } = params;
   const gameId = parseInt(id);
-  
+
   try {
     // 1. Check if the user is part of the game
     const playerInGame = await db
@@ -83,17 +81,17 @@ export async function GET(
     }
     
     // Group scores by player and round for easier access
-    const scoresByPlayerRound = {};
+    const scoresByPlayerRound: any = {};
     
     allScores.forEach(score => {
       const playerId = score.playerId;
       const roundNumber = score.roundNumber;
       
-      if (!scoresByPlayerRound[playerId]) {
-        scoresByPlayerRound[playerId] = {};
+      if (!scoresByPlayerRound[playerId ?? 0]) {
+        scoresByPlayerRound[playerId?? 0] = {};
       }
       
-      scoresByPlayerRound[playerId][roundNumber] = score;
+      scoresByPlayerRound[playerId?? 0][roundNumber] = score;
     });
     
     // 6. Format player data with complete round history - THIS IS WHERE THE BUG IS
@@ -148,8 +146,7 @@ export async function GET(
     };
     
     return NextResponse.json(fullGameData);
-    
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching game:", error);
     return NextResponse.json(
       { error: "Failed to fetch game", details: error.message },
@@ -158,10 +155,8 @@ export async function GET(
   }
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

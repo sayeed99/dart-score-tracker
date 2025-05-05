@@ -288,6 +288,7 @@ const loadExistingGame = async (id: number) => {
       id: player.id?.toString() || "0",
       name: player.name,
       score: player.score, // This should be the remaining score from API
+      playerTotal: player.playerTotal,
       history: player.history || []
     }));
     

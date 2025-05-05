@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/db";
 import { games, playersGames, scores } from "@/db/schema";
+import { inArray } from "drizzle-orm";
 import { eq, count, avg, max, desc, and } from "drizzle-orm";
 import { PlusCircle, Trophy, Target, BarChart3, Play } from "lucide-react";
 import { safeParseUserId } from "@/lib/auth-utils";
@@ -71,23 +72,61 @@ async function getUserStats(userId: number) {
 
 async function getRecentGames(userId: number, limit = 5) {
   try {
-    // Get recent games
-    const recentGames = await db
+    // First, get distinct game IDs for this user
+    const userGameIds = await db
+      .selectDistinct({
+        gameId: playersGames.gameId
+      })
+      .from(playersGames)
+      .where(eq(playersGames.userId, userId))
+      .orderBy(desc(playersGames.gameId))
+      .limit(limit);
+    
+    const gameIdList = userGameIds.map(g => g.gameId);
+    
+    if (gameIdList.length === 0) {
+      return [];
+    }
+    
+    // Now get the game details
+    const gameDetails = await db
       .select({
         id: games.id,
         createdAt: games.createdAt,
         startingScore: games.startingScore,
         isComplete: games.isComplete,
+      })
+      .from(games)
+      .where(inArray(games.id, gameIdList))
+      .orderBy(desc(games.createdAt));
+    
+    // Now get the player-specific information
+    const playerInfo = await db
+      .select({
+        gameId: playersGames.gameId,
         finalScore: playersGames.finalScore,
         isWinner: playersGames.isWinner,
       })
-      .from(games)
-      .innerJoin(playersGames, eq(games.id, playersGames.gameId))
-      .where(eq(playersGames.userId, userId))
-      .orderBy(desc(games.createdAt))
-      .limit(limit);
-
-    return recentGames;
+      .from(playersGames)
+      .where(
+        and(
+          eq(playersGames.userId, userId),
+          inArray(playersGames.gameId, gameIdList)
+        )
+      );
+    
+    // Create a lookup for player info by game ID
+    const playerInfoByGameId = {};
+    playerInfo.forEach(info => {
+      playerInfoByGameId[info.gameId] = info;
+    });
+    
+    // Combine game details with player info
+    return gameDetails.map(game => ({
+      ...game,
+      finalScore: playerInfoByGameId[game.id]?.finalScore || 0,
+      isWinner: playerInfoByGameId[game.id]?.isWinner || false,
+    }));
   } catch (error) {
     console.error("Error fetching recent games:", error);
     return [];
@@ -96,18 +135,13 @@ async function getRecentGames(userId: number, limit = 5) {
 
 async function getActiveGames(userId: number, limit = 3) {
   try {
-    // Get active (incomplete) games
-    const activeGames = await db
-      .select({
-        id: games.id,
-        createdAt: games.createdAt,
-        updatedAt: games.updatedAt,
-        startingScore: games.startingScore,
-        isComplete: games.isComplete,
-        finalScore: playersGames.finalScore,
+    // First, get distinct active game IDs for this user
+    const userActiveGameIds = await db
+      .selectDistinct({
+        gameId: playersGames.gameId
       })
-      .from(games)
-      .innerJoin(playersGames, eq(games.id, playersGames.gameId))
+      .from(playersGames)
+      .innerJoin(games, eq(playersGames.gameId, games.id))
       .where(
         and(
           eq(playersGames.userId, userId),
@@ -116,8 +150,51 @@ async function getActiveGames(userId: number, limit = 3) {
       )
       .orderBy(desc(games.updatedAt))
       .limit(limit);
-
-    return activeGames;
+    
+    const gameIdList = userActiveGameIds.map(g => g.gameId);
+    
+    if (gameIdList.length === 0) {
+      return [];
+    }
+    
+    // Now get the game details
+    const gameDetails = await db
+      .select({
+        id: games.id,
+        createdAt: games.createdAt,
+        updatedAt: games.updatedAt,
+        startingScore: games.startingScore,
+        isComplete: games.isComplete,
+      })
+      .from(games)
+      .where(inArray(games.id, gameIdList))
+      .orderBy(desc(games.updatedAt));
+    
+    // Now get the player-specific information
+    const playerInfo = await db
+      .select({
+        gameId: playersGames.gameId,
+        finalScore: playersGames.finalScore,
+      })
+      .from(playersGames)
+      .where(
+        and(
+          eq(playersGames.userId, userId),
+          inArray(playersGames.gameId, gameIdList)
+        )
+      );
+    
+    // Create a lookup for player info by game ID
+    const playerInfoByGameId = {};
+    playerInfo.forEach(info => {
+      playerInfoByGameId[info.gameId] = info;
+    });
+    
+    // Combine game details with player info
+    return gameDetails.map(game => ({
+      ...game,
+      finalScore: playerInfoByGameId[game.id]?.finalScore || 0,
+    }));
   } catch (error) {
     console.error("Error fetching active games:", error);
     return [];
@@ -266,14 +343,14 @@ export default async function DashboardPage() {
               </p>
             ) : (
               <div className="space-y-4">
-                {recentGames.map((game) => (
+                {recentGames.map((game, id) => (
                   <div
                     key={game.id}
                     className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
                   >
                     <div>
                       <p className="font-medium">
-                        Game #{game.id}
+                        Game #{recentGames.length - (id)}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(game.createdAt).toLocaleDateString()}
@@ -283,8 +360,8 @@ export default async function DashboardPage() {
                       <p className="font-medium">
                         {game.finalScore}/{game.startingScore}
                       </p>
-                      <p className={`text-sm ${game.isWinner ? "text-green-500" : "text-red-500"}`}>
-                        {game.isWinner ? "Won" : "Lost"}
+                      <p className={`text-sm ${game.isComplete ? "text-green-500" : "text-red-500"}`}>
+                        {game.isWinner ? "Completed" : "Pending"}
                       </p>
                     </div>
                   </div>

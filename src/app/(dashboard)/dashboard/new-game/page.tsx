@@ -388,7 +388,7 @@ const loadExistingGame = async (id: number) => {
       const data = await response.json();
       setGameId(data.game.insertId);
       setGameSettings(settings);
-      setPlayers(playerNames);
+      // setPlayers(playerNames);
       setGameStarted(true);
  
       toast.success("Game started!");

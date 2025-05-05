@@ -15,13 +15,24 @@ import { Badge } from "@/components/ui/badge";
 import { db } from "@/db";
 import { games, playersGames } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { inArray, and } from "drizzle-orm";
 import { Eye, Trophy, Play } from "lucide-react";
 import { safeParseUserId } from "@/lib/auth-utils";
 import { authOptions } from "@/lib/[...nextauth]";
 
 async function getUserGames(userId: number, status?: string) {
   try {
-    // Base query for user's games
+    // Use a subquery to get distinct game IDs for this user first
+    const userGameIds = await db
+      .selectDistinct({
+        gameId: playersGames.gameId
+      })
+      .from(playersGames)
+      .where(eq(playersGames.userId, userId));
+    
+    const gameIdList = userGameIds.map(g => g.gameId);
+    
+    // Then get the complete game information using these IDs
     let query = db
       .select({
         id: games.id,
@@ -31,35 +42,69 @@ async function getUserGames(userId: number, status?: string) {
         isComplete: games.isComplete,
         doubleIn: games.doubleIn,
         doubleOut: games.doubleOut,
-        isWinner: playersGames.isWinner,
-        finalScore: playersGames.finalScore,
-        gamePoints: playersGames.gamePoints,
       })
       .from(games)
-      .innerJoin(playersGames, eq(games.id, playersGames.gameId))
-      .where(eq(playersGames.userId, userId))
+      .where(
+        // Use inArray from drizzle-orm
+        inArray(games.id, gameIdList)
+      )
       .orderBy(desc(games.updatedAt))
       .limit(50);
-
+    
     // Filter by status if provided
     if (status === "active") {
       query = query.where(eq(games.isComplete, false));
     } else if (status === "completed") {
       query = query.where(eq(games.isComplete, true));
     }
-
-    return await query;
+    
+    // Get the games
+    const gamesList = await query;
+    const gameIds = gamesList.map(g => g.id);
+    
+    // Now get the player-specific information for each game
+    const playerInfo = await db
+      .select({
+        gameId: playersGames.gameId,
+        isWinner: playersGames.isWinner,
+        finalScore: playersGames.finalScore,
+        gamePoints: playersGames.gamePoints,
+      })
+      .from(playersGames)
+      .where(
+        and(
+          eq(playersGames.userId, userId),
+          inArray(playersGames.gameId, gameIds)
+        )
+      );
+    
+    // Create a lookup for player info by game ID
+    const playerInfoByGameId = {};
+    playerInfo.forEach(info => {
+      playerInfoByGameId[info.gameId] = info;
+    });
+    
+    // Combine game info with player info
+    let data =  gamesList.map(game => ({
+      ...game,
+      isWinner: playerInfoByGameId[game.id]?.isWinner || false,
+      finalScore: playerInfoByGameId[game.id]?.finalScore || 0,
+      gamePoints: playerInfoByGameId[game.id]?.gamePoints || 0,
+    }));
+    console.log(data);
+    return data
   } catch (error) {
     console.error("Error fetching game history:", error);
     return [];
   }
 }
 
-export default async function HistoryPage({
-  searchParams,
-}: {
-  searchParams: { status?: string }
-}) {
+export default async function HistoryPage(
+  props: {
+    searchParams: Promise<{ status?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getServerSession(authOptions);
 
   const userId = safeParseUserId(session?.user?.id);
@@ -152,15 +197,9 @@ export default async function HistoryPage({
                     <TableCell>{game.finalScore}</TableCell>
                     <TableCell>
                       {game.isComplete ? (
-                        game.isWinner ? (
-                          <Badge variant="success" className="bg-green-500 hover:bg-green-600">
-                            Won
-                          </Badge>
-                        ) : (
                           <Badge variant="destructive">
-                            Lost
+                            COMPLETED
                           </Badge>
-                        )
                       ) : (
                         <Badge variant="outline" className="border-yellow-500 text-yellow-500">
                           In Progress

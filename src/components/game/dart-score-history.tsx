@@ -29,6 +29,7 @@ interface Player {
   id: string;
   name: string;
   score: number;
+  playerTotal?: number;
   history: RoundHistory[];
 }
 
@@ -137,10 +138,10 @@ export function DartScoreHistory({
       
       // Set the current game state
       setCurrentGame({
-        active: true, // If we're resuming, it's active
+        active: false, // If we're resuming, it's active
         round: maxRound > 0 ? 
           (initialPlayers.length === playersWithMaxRound?.length ? maxRound + 1 : maxRound) : 1,
-        winner: null, // If there was a winner, we wouldn't be resuming
+        winner: initialGameState?.winner || null, // If there was a winner, we wouldn't be resuming
         gamePoints, // Use our initialized game points
         currentPlayerIndex,
         roundComplete: false
@@ -453,7 +454,7 @@ export function DartScoreHistory({
     return (
       <Card className="mb-6">
         <CardHeader className="pb-2">
-          <CardTitle>Current Game Scores</CardTitle>
+          <CardTitle>Game Stats & Scores</CardTitle>
           <CardDescription>Round {currentGame.round}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -466,10 +467,13 @@ export function DartScoreHistory({
                 }`}
               >
                 <div className="font-medium">{player.name}</div>
-                <div className="text-xl font-bold">{player.score}</div>
+                <div className="text-xl font-bold">{player.playerTotal}</div>
                 <div className="text-xs text-muted-foreground">
                   Game Points: {currentGame.gamePoints[player.id] || 0}
                 </div>
+                {player.id === currentGame.winner ? <div className="text-xs font-bold">
+                  Winner
+                </div> : null}
               </div>
             ))}
           </div>
