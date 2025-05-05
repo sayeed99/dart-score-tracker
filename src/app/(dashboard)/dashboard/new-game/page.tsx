@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, X, ArrowRight, ArrowLeft, Play, Loader } from "lucide-react";
+import { UserPlus, X, ArrowRight, ArrowLeft, Play, Loader, ArrowUp, ArrowDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DartScoreTracker } from "@/components/game/dart-score-tracker";
 import { safeParseUserId } from "@/lib/auth-utils";
@@ -40,6 +40,26 @@ const GameStartForm = ({ onStartGame }: GameStartFormProps) => {
     doubleOut: true,
     gamePointThreshold: 1
   });
+
+  const movePlayerUp = (index: number) => {
+    if (index === 0) return; // Can't move first player up
+    
+    const newPlayers = [...players];
+    const temp = newPlayers[index];
+    newPlayers[index] = newPlayers[index - 1];
+    newPlayers[index - 1] = temp;
+    setPlayers(newPlayers);
+  };
+  
+  const movePlayerDown = (index: number) => {
+    if (index === players.length - 1) return; // Can't move last player down
+    
+    const newPlayers = [...players];
+    const temp = newPlayers[index];
+    newPlayers[index] = newPlayers[index + 1];
+    newPlayers[index + 1] = temp;
+    setPlayers(newPlayers);
+  };  
 
   const addPlayer = () => {
     if (newPlayerName.trim() === "") return;
@@ -108,14 +128,35 @@ const GameStartForm = ({ onStartGame }: GameStartFormProps) => {
                             <Badge variant="outline">You</Badge>
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removePlayer(index)}
-                          disabled={index === 0 && session?.user?.name === player}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => movePlayerUp(index)}
+                            disabled={index === 0}
+                            title="Move player up"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => movePlayerDown(index)}
+                            disabled={index === players.length - 1}
+                            title="Move player down"
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removePlayer(index)}
+                            disabled={index === 0 && session?.user?.name === player}
+                            title="Remove player"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
