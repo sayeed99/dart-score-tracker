@@ -284,22 +284,12 @@ export function DartScoreTracker({
 
   // Check game conditions after any dart entry
   const checkGameConditions = (playerId: string) => {
+
     const dartsThrown = getDartsThrown(playerId);
     
     // Don't check if no darts thrown yet
     if (dartsThrown === 0) return;
     
-    // Check for bust first
-    if (checkAutoBust(playerId, dartsThrown)) {
-      return;
-    }
-    
-    // Then check for win
-    if (checkAutoWin(playerId, dartsThrown)) {
-      return;
-    }
-    
-    // If no bust or win and not on the last dart, unlock next dart
     if (dartsThrown < 3) {
       setEnabledDarts(prev => ({
         ...prev,
@@ -308,57 +298,93 @@ export function DartScoreTracker({
         )
       }));
     }
+
+    // Check for bust first
+    if (checkAutoBust(playerId, dartsThrown)) {
+      return;
+    }
+    
+    // Then check for win
+    if (checkAutoWin(playerId, dartsThrown)) {
+      return;
+    }    
   };
 
-  // Handle dart input change with immediate bust/win checking
-  const handleDartInputChange = (
-    playerId: string,
-    dartIndex: number,
-    field: 'value' | 'multiplier',
-    raw: string
-  ): void => {
-    setDartInputs(prev => {
-      // 1) clone this one player's darts array
-      const oldDarts = prev[playerId] ?? [
-        { value: '', multiplier: 1 },
-        { value: '', multiplier: 1 },
-        { value: '', multiplier: 1 }
-      ];
-      const newDarts = oldDarts.map((d, i) =>
-        i === dartIndex ? { ...d } : d
-      );
+// Handle dart input change with immediate bust/win checking
+const handleDartInputChange = (
+  playerId: string,
+  dartIndex: number,
+  field: 'value' | 'multiplier',
+  raw: string
+): void => {
+  // Create an updated inputs object to use locally and for state update
+  const updateDartInputs = (prevInputs: Record<string, DartInput[]>) => {
+    // 1) clone this one player's darts array
+    const oldDarts = prevInputs[playerId] ?? [
+      { value: '', multiplier: 1 },
+      { value: '', multiplier: 1 },
+      { value: '', multiplier: 1 }
+    ];
+    const newDarts = oldDarts.map((d, i) =>
+      i === dartIndex ? { ...d } : d
+    );
   
-      // 2) apply validation logic
-      if (field === 'value') {
-        if (
-          raw === '' ||
-          (/^\d+$/.test(raw) && (parseInt(raw) <= 20 || parseInt(raw) === 25))
-        ) {
-          newDarts[dartIndex].value = raw;
-        } else {
-          return prev; // invalid entry: ignore
-        }
+    // 2) apply validation logic
+    if (field === 'value') {
+      if (
+        raw === '' ||
+        (/^\d+$/.test(raw) && (parseInt(raw) <= 20 || parseInt(raw) === 25))
+      ) {
+        newDarts[dartIndex].value = raw;
       } else {
-        const m = parseInt(raw, 10);
-        if ([1, 2, 3].includes(m)) {
-          newDarts[dartIndex].multiplier = m;
-        } else {
-          return prev; // invalid entry
-        }
+        return prevInputs; // invalid entry: ignore
       }
+    } else {
+      const m = parseInt(raw, 10);
+      if ([1, 2, 3].includes(m)) {
+        newDarts[dartIndex].multiplier = m;
+      } else {
+        return prevInputs; // invalid entry
+      }
+    }
   
-      // 3) return a new state object with only that player's darts replaced
-      return {
-        ...prev,
-        [playerId]: newDarts
-      };
-    });
-
-    // Check game conditions (win/bust) after a short delay to ensure state is updated
-    setTimeout(() => {
-      checkGameConditions(playerId);
-    }, 100);
+    // 3) return a new state object with only that player's darts replaced
+    return {
+      ...prevInputs,
+      [playerId]: newDarts
+    };
   };
+
+  // Update the state
+  setDartInputs(prev => {
+    const newInputs = updateDartInputs(prev);
+    
+    // Immediately after updating inputs, enable the next dart if applicable
+    if (field === 'value' && raw !== '') {
+      // Calculate darts thrown in the updated state
+      const dartsThrown = newInputs[playerId].filter(d => d.value !== '').length;
+      
+      // Enable the next dart input immediately
+      if (dartsThrown > 0 && dartsThrown < 3) {
+        setTimeout(() => {
+          setEnabledDarts(prev => ({
+            ...prev,
+            [playerId]: prev[playerId].map((_, i) => 
+              i <= dartsThrown ? true : false
+            )
+          }));
+        }, 0);
+      }
+    }
+    
+    return newInputs;
+  });
+
+  // Check game conditions (win/bust) after a short delay to ensure state is updated
+  setTimeout(() => {
+    checkGameConditions(playerId);
+  }, 100);
+}
 
   // Process bust confirmation
   const proceedAfterBust = () => {

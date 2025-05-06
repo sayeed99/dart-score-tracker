@@ -309,7 +309,7 @@ export default async function DashboardPage() {
                         {game.finalScore}/{game.startingScore}
                       </p>
                       <Button asChild size="sm" className="bg-green-600 hover:bg-green-700">
-                        <Link href={`/dashboard/new-game?id=${game.id}`}>
+                        <Link href={`/dashboard/game/${game.id}`}>
                           <Play className="h-4 w-4" />
                         </Link>
                       </Button>
