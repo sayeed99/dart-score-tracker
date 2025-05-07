@@ -214,6 +214,19 @@ export function DartScoreTracker({
     }, 0);
   };
 
+  // Calculate score for the current player's turn
+  const calculateTurnPending = (playerId: string) => {
+    let data = (dartInputs[playerId] || []).reduce((sum, d) => {
+      const v = d.value === '' ? 0 : parseInt(d.value as string, 10);
+      return sum + v * d.multiplier;
+    }, 0);
+    const player = players.find(p => p.id === playerId);
+    if(player) {
+      data = player.score - data;
+    }
+    return data;
+  };
+
   // Returns the count of darts thrown (darts with values) for a player
   const getDartsThrown = (playerId: string) => {
     return (dartInputs[playerId] || []).filter(d => d.value !== '').length;
@@ -255,6 +268,8 @@ export function DartScoreTracker({
 
     const turnScore = calculateTurnScore(playerId);
     const newScore = player.score - turnScore;
+
+    console.log(newScore)
     
     if (newScore === 0) {
       // Check double out requirement if enabled
@@ -305,9 +320,9 @@ export function DartScoreTracker({
     }
     
     // Then check for win
-    if (checkAutoWin(playerId, dartsThrown)) {
-      return;
-    }    
+    // if (checkAutoWin(playerId, dartsThrown)) {
+    //   return;
+    // }    
   };
 
 // Handle dart input change with immediate bust/win checking
@@ -383,7 +398,7 @@ const handleDartInputChange = (
   // Check game conditions (win/bust) after a short delay to ensure state is updated
   setTimeout(() => {
     checkGameConditions(playerId);
-  }, 100);
+  }, 400);
 }
 
   // Process bust confirmation
@@ -826,12 +841,10 @@ const handleDartInputChange = (
                     value={playerDartInputs[dartIndex]?.value || ''}
                     onChange={(e) => handleDartInputChange(currentPlayer.id, dartIndex, 'value', e.target.value)}
                     className="flex-1 text-xl w-12 h-12 text-center font-medium"
-                    disabled={!playerEnabledDarts[dartIndex]}
                   />
                   <Select
                     value={String(playerDartInputs[dartIndex]?.multiplier || 1)}
-                    onValueChange={(value) => handleDartInputChange(currentPlayer.id, dartIndex, 'multiplier', value)}
-                    disabled={!playerEnabledDarts[dartIndex]}
+                    onValueChange={(value) => handleDartInputChange(currentPlayer.id, dartIndex, 'multiplier', value)}                    
                   >
                     <SelectTrigger className="w-24 h-12">
                       <SelectValue />
@@ -849,6 +862,9 @@ const handleDartInputChange = (
           <div className="flex justify-between items-center mt-4">
             <div className="text-xl font-bold">
               Score: {calculateTurnScore(currentPlayer.id)}
+            </div>
+            <div className="text-xl font-bold">
+              Remaining: {calculateTurnPending(currentPlayer.id)}
             </div>
             <div className="space-x-2">
               <Button 
